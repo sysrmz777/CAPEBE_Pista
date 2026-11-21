@@ -12,7 +12,7 @@ flowchart TD
         UI["Pantallas Compose\n• PantallaLogin / Login / Register / PinScreen\n• Principal (Centro de Control de Pista)\n• CalendarioVuelos (Sáb/Dom/Festivos)\n• TerminosCondiciones + QrScannerActivity (Cámara ZXing)\n• ConfirmacionVuelo (Horómetro DGAC)\n• MisVuelos (Bitácora) y ReporteDiarioScreen\n• RecursosNativos (Linterna, GPS OSM, Brújula)"]
         VM["ViewModels\n• LoginViewModel\n• RegisterViewModel\n• CalendarioViewModel"]
         ROOM["Persistencia Local (Room SQLite)\n• AppDatabase / UsuarioDao / UsuarioEntity\n• SessionManager + PIN 4 dígitos"]
-        RETRO["Cliente REST (Retrofit 2 + OkHttp)\n• ServerConfig (AWS EC2)\n• PistaApi (:8083) y VuelosSocioApi (:8082)\n• QrApi (:8084)"]
+        RETRO["Cliente REST (Retrofit 2 + OkHttp)\n• ServerConfig (AWS Elastic IP 3.213.85.189)\n• PistaApi (:8083) y VuelosSocioApi (:8082)\n• QrApi (:8084)"]
         NATIVOS["Hardware y Sensores Nativos\n• Cámara (ZXing Embedded QR Scanner)\n• GPS FusedLocation + osmdroid OSM + Google Maps\n• CameraManager (Linterna de losa)\n• SensorManager (Brújula magnética)"]
 
         UI --> VM
@@ -21,7 +21,7 @@ flowchart TD
         VM --> RETRO
     end
 
-    subgraph Cloud["Nube AWS EC2 (Docker Compose)"]
+    subgraph Cloud["Nube AWS EC2 (Docker Compose - IP Elástica 3.213.85.189)"]
         MSV["service-vuelos (:8082)\n/api/vuelos"]
         MSP["service-pista (:8083)\n/api/v1/pista"]
         MSQ["service-qr (:8084)\n/api/v1/qr"]
