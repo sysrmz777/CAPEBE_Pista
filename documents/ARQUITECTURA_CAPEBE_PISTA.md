@@ -1,19 +1,19 @@
-# Diagramas de Arquitectura — App Encargado de Pista CAPEBE
+# Diagramas de Arquitectura - Proyecto CAPEBE (Rol Operador de Pista)
 
-Documento técnico para `/documents` — **Club Aéreo del Personal del BancoEstado (CAPEBE)**.
+Documento preparado para la rama `/documents` según la **Rúbrica Experiencia 3 - 2026**.
 
 ---
 
-## 1. Arquitectura General (Android MVVM + SQLite + Retrofit + AWS EC2)
+## 1. Diagrama de Arquitectura del Proyecto (MVVM + SQLite + Retrofit + Cloud)
 
 ```mermaid
 flowchart TD
-    subgraph Android["App Android: Encargado de Pista CAPEBE (Kotlin + Jetpack Compose + MVVM)"]
-        UI["Pantallas Compose\n• PantallaLogin / Login / Register / PinScreen\n• Principal (Centro de Control de Pista)\n• CalendarioVuelos (Sáb/Dom/Festivos)\n• TerminosCondiciones + QrScannerActivity (Cámara ZXing)\n• ConfirmacionVuelo (Horómetro DGAC)\n• MisVuelos (Bitácora) y ReporteDiarioScreen\n• RecursosNativos (Linterna, GPS OSM, Brújula)"]
-        VM["ViewModels\n• LoginViewModel\n• RegisterViewModel\n• CalendarioViewModel"]
-        ROOM["Persistencia Local (Room SQLite)\n• AppDatabase / UsuarioDao / UsuarioEntity\n• SessionManager + PIN 4 dígitos"]
-        RETRO["Cliente REST (Retrofit 2 + OkHttp)\n• ServerConfig (AWS EC2)\n• PistaApi (:8083) y VuelosSocioApi (:8082)\n• QrApi (:8084)"]
-        NATIVOS["Hardware y Sensores Nativos\n• Cámara (ZXing Embedded QR Scanner)\n• GPS FusedLocation + osmdroid OSM + Google Maps\n• CameraManager (Linterna de losa)\n• SensorManager (Brújula magnética)"]
+    subgraph Android["📱 App Android PISTA_CAPEBE (Jetpack Compose + MVVM)"]
+        UI["Compose UI (Pantallas Rol Operador de Pista)\n• PantallaLogin / Login / Register / PinScreen\n• Principal (Jefatura de Pista)\n• CalendarioVuelos (Control Pista)\n• TerminosCondiciones (Protocolo DGAC)\n• ConfirmacionVuelo (Autorización)\n• MisVuelos (Bitácora e Inspecciones)\n• RecursosNativos (Linterna, Batería, Vibración, GPS, Brújula)"]
+        VM["ViewModels (Lógica y Estado UI)\n• LoginViewModel\n• RegisterViewModel\n• CalendarioViewModel"]
+        ROOM["SQLite Local (Room + SessionManager)\n• UsuarioEntity / UsuarioDao\n• capebe_pista_database.db\n• Autenticación y PIN 4 dígitos"]
+        RETRO["Cliente HTTP Retrofit 2 + OkHttp\n• RetrofitPista\n• PistaApi (Puerto 8080)\n• InspeccionApi (Puerto 8081)"]
+        NATIVOS["Recursos Nativos Android\n• CameraManager (Linterna Losa)\n• BatteryManager (Batería Turno)\n• VibratorManager (Alerta Háptica)\n• LocationManager (GPS Mapa OSM)\n• SensorManager (Brújula Magnética)"]
 
         UI --> VM
         UI --> NATIVOS
@@ -21,46 +21,69 @@ flowchart TD
         VM --> RETRO
     end
 
-    subgraph Cloud["Nube AWS EC2 (Docker Compose)"]
-        MSV["service-vuelos (:8082)\n/api/vuelos"]
-        MSP["service-pista (:8083)\n/api/v1/pista"]
-        MSQ["service-qr (:8084)\n/api/v1/qr"]
-        PG[("PostgreSQL 18 Alpine\nBase de datos capebeBD")]
+    subgraph Cloud["☁️ Nube (AWS EC2 / Docker Compose)"]
+        subgraph Docker1["Contenedor Microservicio 1 (Puerto 8080)"]
+            MS1["service-pista (Spring Boot + JPA)\n/api/v1/pista"]
+        end
+        subgraph Docker2["Contenedor Microservicio 2 (Puerto 8081)"]
+            MS2["service-inspecciones (Spring Boot + JPA)\n/api/v1/inspecciones"]
+        end
+        subgraph DBs["Contenedores PostgreSQL 18"]
+            PG1[("PostgreSQL (5434:5432)\ncapebe_pista_db")]
+            PG2[("PostgreSQL (5435:5432)\ncapebe_inspecciones_db")]
+        end
 
-        MSV --> PG
-        MSP --> PG
-        MSQ --> PG
+        MS1 --> PG1
+        MS2 --> PG2
     end
 
-    RETRO -- "HTTP / JSON" --> MSV
-    RETRO -- "HTTP / JSON" --> MSP
-    RETRO -- "HTTP / JSON" --> MSQ
+    RETRO -- "HTTP / JSON (GET, POST, PUT, DELETE)" --> MS1
+    RETRO -- "HTTP / JSON (GET, POST, PUT, DELETE)" --> MS2
 ```
 
 ---
 
-## 2. Flujo de Validación QR y Habilitación en Pista
+## 2. Diagrama de Arquitectura de Microservicios (Spring Boot + JUnit 5 + PostgreSQL)
 
 ```mermaid
-sequenceDiagram
-    actor Encargado as Encargado de Pista
-    participant App as App Pista CAPEBE
-    participant Cam as Cámara QR (ZXing)
-    participant QR as service-qr (:8084)
-    participant Pista as service-pista (:8083)
-    participant DB as PostgreSQL (AWS)
+flowchart LR
+    subgraph Cliente["App Android (Operador de Pista)"]
+        Retrofit["RetrofitPista\n(GsonConverter + LoggingInterceptor)"]
+    end
 
-    Encargado->>App: Toca "Escanear Código QR con Cámara"
-    App->>Cam: Abre QrScannerActivity (vertical)
-    Cam-->>App: Devuelve código (ej. CAPEBE-SCTB-XXXX)
-    App->>QR: GET /api/v1/qr/codigo/{codigo}
-    QR->>DB: Consulta estado y datos del pasajero
-    DB-->>QR: Pase válido (PENDIENTE)
-    QR-->>App: Identidad, aeronave, horario y cupos
-    Encargado->>App: Completa checklist losa + horómetro DGAC (XXXX.X)
-    App->>Pista: PUT /api/v1/pista/{id}/horometro
-    Pista->>DB: Registra vuelo y actualiza horómetro aeronave
-    App->>QR: PUT /api/v1/qr/validar/{codigo}
-    QR->>DB: Marca QR como VALIDADO - HABILITADO EN PISTA
-    App-->>Encargado: Confirmación guardada y formulario limpio para el siguiente vuelo
+    subgraph MS_Pista["Microservicio 1: service-pista (Puerto 8080)"]
+        C1["OperacionPistaController\n@RestController /api/v1/pista"]
+        S1["OperacionPistaService\n@Service @Transactional"]
+        R1["OperacionPistaRepository\nJpaRepository<OperacionPista, Long>"]
+        E1["OperacionPista (@Entity)\n• idOperacion\n• codigoPista (SCTB/SCIE)\n• aeronave (CC-AAA/BBB/CCC)\n• pilotoAsignado\n• fecha / horario\n• estadoPista\n• condicionClima"]
+        EX1["GlobalExceptionHandler\n@RestControllerAdvice"]
+        T1["OperacionPistaServiceTest\nJUnit 5 + Mockito"]
+
+        C1 --> S1
+        S1 --> R1
+        R1 --> E1
+        T1 -. "Prueba Unitaria" .-> S1
+    end
+
+    subgraph MS_Inspecciones["Microservicio 2: service-inspecciones (Puerto 8081)"]
+        C2["InspeccionPistaController\n@RestController /api/v1/inspecciones"]
+        S2["InspeccionPistaService\n@Service @Transactional"]
+        R2["InspeccionPistaRepository\nJpaRepository<InspeccionPista, Long>"]
+        E2["InspeccionPista (@Entity)\n• idInspeccion\n• matriculaAeronave\n• basePista\n• fechaHora\n• nivelCombustible (100LL)\n• estadoChecklist\n• lucesYBalizasOk\n• observaciones\n• operadorPista"]
+        EX2["GlobalExceptionHandler\n@RestControllerAdvice"]
+        T2["InspeccionPistaServiceTest\nJUnit 5 + Mockito"]
+
+        C2 --> S2
+        S2 --> R2
+        R2 --> E2
+        T2 -. "Prueba Unitaria" .-> S2
+    end
+
+    DB1[("PostgreSQL\ncapebe_pista_db")]
+    DB2[("PostgreSQL\ncapebe_inspecciones_db")]
+
+    Retrofit --> C1
+    Retrofit --> C2
+    R1 --> DB1
+    R2 --> DB2
 ```
